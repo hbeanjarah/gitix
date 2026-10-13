@@ -1,0 +1,65 @@
+version: 2
+project_name: gitix
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - main: ./cmd/gitix
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.ShortCommit}} -X main.date={{.Date}}
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude: ["^docs:", "^test:", "^chore:", "^ci:"]
+
+nfpms:
+  - package_name: gitix
+    homepage: https://github.com/hbeanjarah/gitix
+    maintainer: hbeanjarah <hbeanjarahoussen@gmail.com>
+    description: Find and clean git branches. Identify and eXecute.
+    license: MIT
+    formats: [deb, rpm]
+    dependencies: [git]
+
+homebrew_casks:
+  - name: gitix
+    homepage: https://github.com/hbeanjarah/gitix
+    description: Find and clean git branches. Identify and eXecute.
+    license: MIT
+    repository:
+      owner: hbeanjarah
+      name: homebrew-tap
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    hooks:
+      post:
+        # The binary is not signed: remove the quarantine flag so macOS lets it run.
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/gitix"]
+          end
+
+scoops:
+  - name: gitix
+    homepage: https://github.com/hbeanjarah/gitix
+    description: Find and clean git branches. Identify and eXecute.
+    license: MIT
+    repository:
+      owner: hbeanjarah
+      name: scoop-bucket
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
