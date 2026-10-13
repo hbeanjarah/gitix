@@ -69,3 +69,14 @@ func TestMergeDetection(t *testing.T) {
 		}
 	}
 }
+
+func TestSquashMergedUnrelatedHistory(t *testing.T) {
+	r := testrepo.New(t)
+	r.Git("switch", "--orphan", "unrelated")
+	r.Commit("other.txt", "no common history with main")
+	repo := git.New(git.ExecRunner{Dir: r.Dir})
+	sq, err := repo.SquashMerged("unrelated", "origin/main")
+	if err != nil || sq {
+		t.Errorf("want false, nil; got %v, %v", sq, err)
+	}
+}
