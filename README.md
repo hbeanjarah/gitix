@@ -34,6 +34,20 @@ Restore with: git branch <name> <sha>
 
 ## Install
 
+One command, nothing to configure:
+
+```sh
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/hbeanjarah/gitix/main/install.sh | sh
+```
+
+```powershell
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/hbeanjarah/gitix/main/install.ps1 | iex
+```
+
+Or with a package manager:
+
 | OS | Command |
 |---|---|
 | macOS / Linux (Homebrew) | `brew install --cask hbeanjarah/tap/gitix` |
