@@ -12,7 +12,6 @@ import (
 // Set at build time by GoReleaser.
 var (
 	version = "dev"
-	commit  = "none"
 	date    = "unknown"
 )
 
@@ -24,7 +23,7 @@ func main() {
 		Interactive: ui.IsTerminal(os.Stdin) && ui.IsTerminal(os.Stdout),
 		Paint:       ui.NewPainter(os.Stdout),
 		Now:         time.Now,
-		Version:     fmt.Sprintf("%s (commit %s, built %s)", version, commit, date),
+		Version:     fmt.Sprintf("%s (built %s)", version, date),
 	}
 	os.Exit(cli.Run(opts, os.Args[1:]))
 }
