@@ -97,7 +97,7 @@ func newRoot(opts Options) *cobra.Command {
 	root.SetOut(opts.Out)
 	root.SetErr(opts.Err)
 	root.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error { return usageError(err) })
-	root.AddCommand(a.findCmd())
+	root.AddCommand(a.findCmd(), a.cleanCmd())
 	return root
 }
 
