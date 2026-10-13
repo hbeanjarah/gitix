@@ -48,6 +48,9 @@ func (r *Repo) IsAncestor(branch, base string) (bool, error) {
 // equivalent patch. No ref is created or moved.
 func (r *Repo) SquashMerged(branch, base string) (bool, error) {
 	mergeBase, err := r.run.Run("merge-base", base, branch)
+	if exitCode(err) == 1 {
+		return false, nil // no common history, so base cannot contain the branch
+	}
 	if err != nil {
 		return false, err
 	}
