@@ -44,11 +44,23 @@ func ago(n int, unit string) string {
 
 // Table writes rows as aligned columns, indented by two spaces.
 func Table(w io.Writer, rows [][]string) {
-	tw := tabwriter.NewWriter(w, 0, 0, 3, ' ', 0)
+	for _, line := range Columns(rows) {
+		fmt.Fprintln(w, "  "+line)
+	}
+}
+
+// Columns aligns rows into lines, with at least three spaces between columns.
+func Columns(rows [][]string) []string {
+	if len(rows) == 0 {
+		return nil
+	}
+	var b strings.Builder
+	tw := tabwriter.NewWriter(&b, 0, 0, 3, ' ', 0)
 	for _, row := range rows {
-		fmt.Fprintln(tw, "  "+strings.Join(row, "\t"))
+		fmt.Fprintln(tw, strings.Join(row, "\t"))
 	}
 	tw.Flush()
+	return strings.Split(strings.TrimSuffix(b.String(), "\n"), "\n")
 }
 
 // Confirm asks a yes/no question. Anything but y/yes is no.
