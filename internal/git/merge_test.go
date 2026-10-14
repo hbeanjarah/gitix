@@ -1,6 +1,7 @@
 package git_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/hbeanjarah/gitix/internal/git"
@@ -27,6 +28,52 @@ func TestResolveBaseFallsBackToMain(t *testing.T) {
 func TestResolveBaseRejectsUnknownBranch(t *testing.T) {
 	r := testrepo.New(t)
 	_, err := git.New(git.ExecRunner{Dir: r.Dir}).ResolveBase("nope")
+	if err != git.ErrNotFound {
+		t.Errorf("want ErrNotFound, got %v", err)
+	}
+}
+
+func TestBases(t *testing.T) {
+	protected := []string{"main", "master", "develop"}
+	cases := []struct {
+		name  string
+		setup func(r *testrepo.Repo)
+		want  []string
+	}{
+		{"origin/HEAD only", func(r *testrepo.Repo) {}, []string{"origin/main"}},
+		{"origin/HEAD and develop on origin", func(r *testrepo.Repo) {
+			r.Branch("develop")
+			r.Git("push", "origin", "develop")
+		}, []string{"origin/main", "origin/develop"}},
+		{"local develop is not a base", func(r *testrepo.Repo) {
+			r.Branch("develop")
+		}, []string{"origin/main"}},
+		{"no origin/HEAD", func(r *testrepo.Repo) {
+			r.Git("remote", "set-head", "origin", "--delete")
+			r.Branch("develop")
+			r.Git("push", "origin", "develop")
+		}, []string{"origin/main", "origin/develop"}},
+		{"no remote", func(r *testrepo.Repo) {
+			r.Branch("develop")
+			r.Git("remote", "remove", "origin")
+		}, []string{"main", "develop"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := testrepo.New(t)
+			c.setup(r)
+			got, err := git.New(git.ExecRunner{Dir: r.Dir}).Bases(protected)
+			if err != nil || strings.Join(got, ",") != strings.Join(c.want, ",") {
+				t.Errorf("want %v, got %v, %v", c.want, got, err)
+			}
+		})
+	}
+}
+
+func TestBasesNotFound(t *testing.T) {
+	r := testrepo.New(t)
+	r.Git("remote", "remove", "origin")
+	_, err := git.New(git.ExecRunner{Dir: r.Dir}).Bases([]string{"develop"})
 	if err != git.ErrNotFound {
 		t.Errorf("want ErrNotFound, got %v", err)
 	}
