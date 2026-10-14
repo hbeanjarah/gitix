@@ -129,12 +129,16 @@ func (a *app) pickAndDelete(plan clean.Plan) error {
 			notMerged++
 		}
 	}
+	// Always recap before deleting. Yes is the default only when everything is merged.
+	question := fmt.Sprintf("Delete %s?", count(len(toDelete), "branch"))
+	confirm := ui.ConfirmYes
 	if notMerged > 0 {
-		question := fmt.Sprintf("Delete %s, including %d not merged?", count(len(toDelete), "branch"), notMerged)
-		if ok, _ := ui.Confirm(a.in, a.opts.Out, question); !ok {
-			fmt.Fprintln(a.opts.Out, "Nothing deleted.")
-			return nil
-		}
+		question = fmt.Sprintf("Delete %s, including %d not merged?", count(len(toDelete), "branch"), notMerged)
+		confirm = ui.Confirm
+	}
+	if ok, _ := confirm(a.in, a.opts.Out, question); !ok {
+		fmt.Fprintln(a.opts.Out, "Nothing deleted.")
+		return nil
 	}
 	return a.deleteAll(toDelete)
 }

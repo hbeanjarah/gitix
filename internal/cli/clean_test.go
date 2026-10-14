@@ -87,18 +87,27 @@ func TestCleanListShowsDeletableBranchesMergedChecked(t *testing.T) {
 	}
 }
 
-func TestCleanDeletesCheckedMergedWithoutAsking(t *testing.T) {
+func TestCleanConfirmsMergedWithYesByDefault(t *testing.T) {
 	r := scenario(t)
-	res := gitixPick(t, r.Dir, "", &fakePicker{many: []int{0, 1, 2}}, "clean")
+	res := gitixPick(t, r.Dir, "\n", &fakePicker{many: []int{0, 1, 2}}, "clean")
 	if res.code != 0 {
 		t.Fatalf("got %+v", res)
 	}
 	checkBranches(t, r, res, mergedBranches, append(keptBranches, notMergedBranches...))
-	checkOutput(t, res.out, "Base: origin/main", "Deleted feat/merged (was ", "Restore with: git branch <name> <sha>")
-	if strings.Contains(res.out, "[y/N]") {
-		t.Errorf("merged branches need no confirmation:\n%s", res.out)
-	}
+	checkOutput(t, res.out, "Base: origin/main", "Delete 3 branches? [Y/n]", "Deleted feat/merged (was ", "Restore with: git branch <name> <sha>")
 	checkOutput(t, res.err, "Analyzing 8 branches…")
+}
+
+func TestCleanMergedRefused(t *testing.T) {
+	for _, input := range []string{"n\n", ""} { // "" is end of input: no answer means no
+		r := scenario(t)
+		before := branchNames(r)
+		res := gitixPick(t, r.Dir, input, &fakePicker{many: []int{0, 1, 2}}, "clean")
+		if res.code != 0 || branchNames(r) != before {
+			t.Errorf("%q: got %+v", input, res)
+		}
+		checkOutput(t, res.out, "Nothing deleted.")
+	}
 }
 
 func TestCleanAsksBeforeDeletingNotMerged(t *testing.T) {

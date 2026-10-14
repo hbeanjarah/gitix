@@ -42,6 +42,27 @@ func TestConfirmEndOfInputIsNo(t *testing.T) {
 	}
 }
 
+func TestConfirmYes(t *testing.T) {
+	cases := map[string]bool{"\n": true, "y\n": true, "YES\n": true, "n\n": false, "no\n": false, "whatever\n": false}
+	for input, want := range cases {
+		var out bytes.Buffer
+		got, err := ConfirmYes(bufio.NewReader(strings.NewReader(input)), &out, "Delete?")
+		if err != nil || got != want {
+			t.Errorf("%q: want %v, got %v (%v)", input, want, got, err)
+		}
+		if out.String() != "Delete? [Y/n] " {
+			t.Errorf("prompt: got %q", out.String())
+		}
+	}
+}
+
+func TestConfirmYesEndOfInputIsNo(t *testing.T) {
+	got, err := ConfirmYes(bufio.NewReader(strings.NewReader("")), &bytes.Buffer{}, "Delete?")
+	if got || err != ErrNoAnswer {
+		t.Errorf("want false, ErrNoAnswer; got %v, %v", got, err)
+	}
+}
+
 func TestColumns(t *testing.T) {
 	got := Columns([][]string{{"feat/a", "merged", "2 days ago"}, {"feat/longer", "3 commits", "1 year ago"}})
 	want := []string{

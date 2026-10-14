@@ -62,16 +62,28 @@ func Columns(rows [][]string) []string {
 	return strings.Split(strings.TrimSuffix(b.String(), "\n"), "\n")
 }
 
-// Confirm asks a yes/no question. Anything but y/yes is no.
+// Confirm asks a yes/no question whose default is no. Anything but y/yes is no.
 func Confirm(in *bufio.Reader, out io.Writer, question string) (bool, error) {
-	fmt.Fprintf(out, "%s [y/N] ", question)
+	answer, err := ask(in, out, question+" [y/N] ")
+	return answer == "y" || answer == "yes", err
+}
+
+// ConfirmYes asks a yes/no question whose default is yes: an empty answer is yes,
+// anything but y/yes is no. The end of input is still no.
+func ConfirmYes(in *bufio.Reader, out io.Writer, question string) (bool, error) {
+	answer, err := ask(in, out, question+" [Y/n] ")
+	return err == nil && (answer == "" || answer == "y" || answer == "yes"), err
+}
+
+// ask prints prompt and returns the answer, trimmed and lowercased.
+func ask(in *bufio.Reader, out io.Writer, prompt string) (string, error) {
+	fmt.Fprint(out, prompt)
 	answer, err := in.ReadString('\n')
 	if err != nil && answer == "" {
 		fmt.Fprintln(out)
-		return false, ErrNoAnswer
+		return "", ErrNoAnswer
 	}
-	answer = strings.ToLower(strings.TrimSpace(answer))
-	return answer == "y" || answer == "yes", nil
+	return strings.ToLower(strings.TrimSpace(answer)), nil
 }
 
 // Painter adds ANSI colors when enabled.
