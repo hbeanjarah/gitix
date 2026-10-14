@@ -137,7 +137,7 @@ func TestCleanNothingSelected(t *testing.T) {
 	if res.code != 0 || branchNames(r) != before {
 		t.Errorf("got %+v", res)
 	}
-	checkOutput(t, res.out, "Nothing selected.")
+	checkOutput(t, res.out, "Nothing selected (press space to check a branch).")
 }
 
 func TestCleanCancelled(t *testing.T) {
