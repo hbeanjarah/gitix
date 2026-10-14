@@ -3,6 +3,7 @@ package pick
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
 )
@@ -37,6 +38,39 @@ func TestManyKeys(t *testing.T) {
 		if err != nil || fmt.Sprint(got) != fmt.Sprint(want) {
 			t.Errorf("%q: want %v, got %v (%v)", input, want, got, err)
 		}
+	}
+}
+
+// keyReader returns one key per Read, like a terminal does when keys are typed one by one.
+// A lone esc is only recognized when it arrives on its own.
+type keyReader struct{ keys []string }
+
+func (r *keyReader) Read(p []byte) (int, error) {
+	if len(r.keys) == 0 {
+		return 0, io.EOF
+	}
+	n := copy(p, r.keys[0])
+	r.keys = r.keys[1:]
+	return n, nil
+}
+
+func TestEscClearsAnAppliedFilterFirst(t *testing.T) {
+	// Many: enter or esc ends the typing and keeps the filter; esc then clears it.
+	got, err := Huh{In: &keyReader{[]string{"/", "b", "e", enter, esc, enter}}, Out: &bytes.Buffer{}}.Many("Select", three)
+	if err != nil || fmt.Sprint(got) != "[0]" {
+		t.Errorf("Many: want [0], got %v (%v)", got, err)
+	}
+	// One: esc ends the typing, a second esc clears the filter.
+	i, err := Huh{In: &keyReader{[]string{"/", "g", esc, esc, enter}}, Out: &bytes.Buffer{}}.One("Switch to", three)
+	if err != nil || i != 0 {
+		t.Errorf("One: want 0, got %d (%v)", i, err)
+	}
+}
+
+func TestEscAfterAnEmptyFilterCancels(t *testing.T) {
+	_, err := Huh{In: &keyReader{[]string{"/", esc, esc}}, Out: &bytes.Buffer{}}.Many("Select", three)
+	if err != ErrCancelled {
+		t.Errorf("want ErrCancelled, got %v", err)
 	}
 }
 

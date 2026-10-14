@@ -28,6 +28,10 @@ func TestBases(t *testing.T) {
 			r.Branch("develop")
 			r.Git("push", "origin", "develop")
 		}, []string{"origin/main", "origin/develop"}},
+		{"dangling origin/HEAD", func(r *testrepo.Repo) {
+			// The remote's default branch was renamed and pruned: origin/HEAD points to nothing.
+			r.Git("update-ref", "-d", "refs/remotes/origin/main")
+		}, []string{"main"}},
 		{"no remote", func(r *testrepo.Repo) {
 			r.Branch("develop")
 			r.Git("remote", "remove", "origin")
