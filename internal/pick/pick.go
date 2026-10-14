@@ -70,9 +70,14 @@ func (h Huh) run(form *huh.Form) error {
 	return err
 }
 
+// clearFilter is the help text of huh's clear-filter key; keys looks for it.
+const clearFilter = "clear filter"
+
 // keymap is huh's default with gitix's help texts. "a" and esc are handled by keys.
 func keymap() *huh.KeyMap {
 	k := huh.NewDefaultKeyMap()
+	k.MultiSelect.ClearFilter = key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", clearFilter), key.WithDisabled())
+	k.Select.ClearFilter = key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", clearFilter), key.WithDisabled())
 	k.MultiSelect.Toggle = key.NewBinding(key.WithKeys(" ", "x"), key.WithHelp("space", "toggle"))
 	k.MultiSelect.Submit = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "confirm"))
 	k.MultiSelect.SelectAll = key.NewBinding(key.WithKeys("ctrl+a"), key.WithHelp("a", "select all"))
@@ -100,29 +105,34 @@ type filterField interface {
 // the filter if one is applied, else cancels. Both are ignored while typing a filter.
 type keys struct {
 	filterField
-	all      bool // map "a" to select all / none (MultiSelect only)
-	filtered bool // a filter was applied: esc clears it instead of cancelling
+	all bool // map "a" to select all / none (MultiSelect only)
 }
 
 var cancel = key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel"))
 
+// filterApplied reports whether esc would clear a filter: huh enables its
+// clear-filter key only when a filter is applied and not being typed.
+func (k keys) filterApplied() bool {
+	for _, b := range k.filterField.KeyBinds() {
+		if b.Enabled() && b.Help().Desc == clearFilter {
+			return true
+		}
+	}
+	return false
+}
+
 // KeyBinds adds "esc cancel" to the help when esc cancels.
 func (k keys) KeyBinds() []key.Binding {
-	if k.GetFiltering() || k.filtered {
+	if k.GetFiltering() || k.filterApplied() {
 		return k.filterField.KeyBinds()
 	}
 	return append(k.filterField.KeyBinds(), cancel)
 }
 
 func (k keys) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if press, ok := msg.(tea.KeyMsg); ok {
+	if press, ok := msg.(tea.KeyMsg); ok && !k.GetFiltering() {
 		switch {
-		case k.GetFiltering():
-			// enter or esc ends the typing and keeps the filter.
-			k.filtered = k.filtered || press.Type == tea.KeyEnter || press.Type == tea.KeyEsc
-		case press.Type == tea.KeyEsc && k.filtered:
-			k.filtered = false // the field clears its filter
-		case press.Type == tea.KeyEsc:
+		case press.Type == tea.KeyEsc && !k.filterApplied():
 			// The form only aborts on ctrl+c: send it one.
 			return k, func() tea.Msg { return tea.KeyMsg{Type: tea.KeyCtrlC} }
 		case k.all && press.String() == "a":

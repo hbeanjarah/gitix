@@ -17,7 +17,8 @@ func (r *Repo) Bases(protected []string) ([]string, error) {
 			bases = append(bases, ref)
 		}
 	}
-	if out, err := r.run.Run("symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"); err == nil && out != "" {
+	// origin/HEAD can outlive its target, e.g. after the default branch was renamed and pruned.
+	if out, err := r.run.Run("symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"); err == nil && out != "" && r.Exists(out) {
 		add(out)
 	}
 	for _, name := range protected {
