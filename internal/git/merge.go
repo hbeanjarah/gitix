@@ -9,7 +9,7 @@ import (
 // otherwise origin/HEAD, then main, then master.
 func (r *Repo) ResolveBase(explicit string) (string, error) {
 	if explicit != "" {
-		if !r.exists(explicit) {
+		if !r.Exists(explicit) {
 			return "", ErrNotFound
 		}
 		return explicit, nil
@@ -18,14 +18,48 @@ func (r *Repo) ResolveBase(explicit string) (string, error) {
 		return out, nil
 	}
 	for _, name := range []string{"main", "master"} {
-		if r.exists(name) {
+		if r.Exists(name) {
 			return name, nil
 		}
 	}
 	return "", ErrNotFound
 }
 
-func (r *Repo) exists(ref string) bool {
+// Bases returns the branches to compare against: origin/HEAD, then each protected
+// branch that exists on origin, without duplicates. When none is found on origin,
+// it falls back to the protected branches that exist locally.
+func (r *Repo) Bases(protected []string) ([]string, error) {
+	var bases []string
+	seen := map[string]bool{}
+	add := func(ref string) {
+		if !seen[ref] {
+			seen[ref] = true
+			bases = append(bases, ref)
+		}
+	}
+	if out, err := r.run.Run("symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"); err == nil && out != "" {
+		add(out)
+	}
+	for _, name := range protected {
+		if r.Exists("refs/remotes/origin/" + name) {
+			add("origin/" + name)
+		}
+	}
+	if len(bases) == 0 {
+		for _, name := range protected {
+			if r.Exists("refs/heads/" + name) {
+				add(name)
+			}
+		}
+	}
+	if len(bases) == 0 {
+		return nil, ErrNotFound
+	}
+	return bases, nil
+}
+
+// Exists reports whether ref points to a commit.
+func (r *Repo) Exists(ref string) bool {
 	_, err := r.run.Run("rev-parse", "--verify", "--quiet", ref+"^{commit}")
 	return err == nil
 }
