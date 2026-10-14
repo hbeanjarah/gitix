@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hbeanjarah/gitix/internal/pick"
 	"github.com/hbeanjarah/gitix/internal/testrepo"
 )
 
@@ -63,16 +64,44 @@ func TestFindSwitchSeveralMatchesNonInteractive(t *testing.T) {
 	}
 }
 
-func TestFindSwitchMenu(t *testing.T) {
+func TestFindSwitchList(t *testing.T) {
 	r := testrepo.New(t)
 	r.Branch("feat/trash-a")
 	r.Backdate("2020-01-01T00:00:00")
 	r.Git("switch", "main")
 	r.Branch("feat/trash-b")
 	r.Git("switch", "main")
-	// feat/trash-b is more recent, so it is choice 1; pick 2.
-	res := gitix(t, r.Dir, "2\n", true, "find", "trash", "-s")
+	r.Branch("fix/login")
+	r.Git("switch", "main")
+	// feat/trash-b is more recent, so it comes first; pick the second.
+	p := &fakePicker{one: 1}
+	res := gitixPick(t, r.Dir, "", p, "find", "trash", "-s")
 	if res.code != 0 || r.Git("branch", "--show-current") != "feat/trash-a" {
+		t.Errorf("got %+v", res)
+	}
+	if len(p.choices) != 2 || !strings.HasPrefix(strings.TrimSpace(p.choices[0].Label), "feat/trash-b") {
+		t.Errorf("want only the matches, most recent first, got:\n%s", p.labels())
+	}
+}
+
+func TestFindSwitchListCancelled(t *testing.T) {
+	r := testrepo.New(t)
+	r.Branch("feat/trash-a")
+	r.Git("switch", "main")
+	r.Branch("feat/trash-b")
+	r.Git("switch", "main")
+	res := gitixPick(t, r.Dir, "", &fakePicker{err: pick.ErrCancelled}, "find", "trash", "-s")
+	if res.code != 130 || res.err != "" || r.Git("branch", "--show-current") != "main" {
+		t.Errorf("got %+v", res)
+	}
+}
+
+func TestFindSwitchSingleMatchInTerminal(t *testing.T) {
+	r := testrepo.New(t)
+	r.Branch("feat/trash-module")
+	r.Git("switch", "main")
+	res := gitix(t, r.Dir, "", true, "find", "trash", "-s")
+	if res.code != 0 || r.Git("branch", "--show-current") != "feat/trash-module" {
 		t.Errorf("got %+v", res)
 	}
 }
