@@ -25,6 +25,7 @@ Bases: origin/main, origin/develop
 
 space toggle • ↑ up • ↓ down • / filter • enter confirm • a select all • esc cancel
 
+Delete 2 branches? [Y/n]
 Deleted feat/trash-module (was 3f2a1c9)
 Deleted fix/login (was 8b7e002)
 Restore with: git branch <name> <sha>
@@ -88,8 +89,9 @@ exists on `origin` (so with git flow, both `origin/main` and `origin/develop`):
 - **not merged**: has work that is in none of the bases: `3 commits, never pushed`.
 
 In a terminal, `gitix clean` opens a list where merged branches are checked and the others are
-not. Check what you want, press enter: deleting a branch that is not merged asks for a
-confirmation first. `esc` leaves without deleting anything.
+not. Check what you want and press enter: gitix recaps and asks before deleting. The answer
+defaults to yes, or to no when a checked branch is not merged. `esc` leaves without deleting
+anything.
 
 | Flag | |
 |---|---|
