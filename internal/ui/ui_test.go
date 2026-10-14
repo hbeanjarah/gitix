@@ -42,25 +42,6 @@ func TestConfirmEndOfInputIsNo(t *testing.T) {
 	}
 }
 
-func TestChooseRetriesUntilValid(t *testing.T) {
-	var out bytes.Buffer
-	in := bufio.NewReader(strings.NewReader("abc\n9\n2\n"))
-	got, err := Choose(in, &out, [][]string{{"a"}, {"b"}})
-	if err != nil || got != 1 {
-		t.Errorf("want 1, got %d (%v)", got, err)
-	}
-	if strings.Count(out.String(), "Enter a number between 1 and 2.") != 2 {
-		t.Errorf("want two retry messages, got:\n%s", out.String())
-	}
-}
-
-func TestChooseEndOfInput(t *testing.T) {
-	_, err := Choose(bufio.NewReader(strings.NewReader("")), &bytes.Buffer{}, [][]string{{"a"}})
-	if err != ErrNoAnswer {
-		t.Errorf("got %v", err)
-	}
-}
-
 func TestColumns(t *testing.T) {
 	got := Columns([][]string{{"feat/a", "merged", "2 days ago"}, {"feat/longer", "3 commits", "1 year ago"}})
 	want := []string{

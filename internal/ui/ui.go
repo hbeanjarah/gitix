@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -73,29 +72,6 @@ func Confirm(in *bufio.Reader, out io.Writer, question string) (bool, error) {
 	}
 	answer = strings.ToLower(strings.TrimSpace(answer))
 	return answer == "y" || answer == "yes", nil
-}
-
-// Choose shows a numbered menu and returns the chosen index (0-based).
-// It asks again until the answer is valid, or returns ErrNoAnswer when input ends.
-func Choose(in *bufio.Reader, out io.Writer, options [][]string) (int, error) {
-	rows := make([][]string, len(options))
-	for i, opt := range options {
-		rows[i] = append([]string{strconv.Itoa(i+1) + ")"}, opt...)
-	}
-	Table(out, rows)
-	for {
-		fmt.Fprint(out, "  Choice: ")
-		answer, err := in.ReadString('\n')
-		n, convErr := strconv.Atoi(strings.TrimSpace(answer))
-		if convErr == nil && n >= 1 && n <= len(options) {
-			return n - 1, nil
-		}
-		if err != nil {
-			fmt.Fprintln(out)
-			return 0, ErrNoAnswer
-		}
-		fmt.Fprintf(out, "  Enter a number between 1 and %d.\n", len(options))
-	}
 }
 
 // Painter adds ANSI colors when enabled.

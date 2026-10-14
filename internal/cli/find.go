@@ -8,6 +8,7 @@ import (
 
 	"github.com/hbeanjarah/gitix/internal/find"
 	"github.com/hbeanjarah/gitix/internal/git"
+	"github.com/hbeanjarah/gitix/internal/pick"
 	"github.com/hbeanjarah/gitix/internal/ui"
 )
 
@@ -17,7 +18,7 @@ func (a *app) findCmd() *cobra.Command {
 		Use:   "find [term]",
 		Short: "Find branches by name, most recent first",
 		Example: "  gitix find trash        list branches containing \"trash\"\n" +
-			"  gitix find trash -s     switch to the match (menu if several)\n" +
+			"  gitix find trash -s     switch to the match (list if several)\n" +
 			"  gitix find              list every branch, most recent first",
 		Args: usageArgs(cobra.MaximumNArgs(1)),
 		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -55,19 +56,27 @@ func (a *app) runFind(term string, remote, switchTo bool) error {
 		return fail("no branch matches %q", term)
 	}
 	if !switchTo {
-		ui.Table(a.opts.Out, a.rows(matches))
+		ui.Table(a.opts.Out, a.rows(matches, a.opts.Paint))
 		return nil
 	}
 
 	target := matches[0]
 	if len(matches) > 1 {
 		if !a.opts.Interactive {
-			ui.Table(a.opts.Out, a.rows(matches))
+			ui.Table(a.opts.Out, a.rows(matches, a.opts.Paint))
 			return fail("%d branches match %q, refine the search", len(matches), term)
 		}
-		i, err := ui.Choose(a.in, a.opts.Out, a.rows(matches))
+		labels := ui.Columns(a.rows(matches, ui.Painter{}))
+		choices := make([]pick.Choice, len(labels))
+		for i, label := range labels {
+			choices[i] = pick.Choice{Label: label}
+		}
+		i, err := a.opts.Picker.One("Switch to", choices)
+		if errors.Is(err, pick.ErrCancelled) {
+			return &ExitError{Code: 130}
+		}
 		if err != nil {
-			return fail("no branch chosen")
+			return fail("%v", err)
 		}
 		target = matches[i]
 	}
@@ -91,7 +100,7 @@ func (a *app) runFind(term string, remote, switchTo bool) error {
 }
 
 // rows renders branches as [marker+name, age]; the current branch gets a "*".
-func (a *app) rows(branches []git.Branch) [][]string {
+func (a *app) rows(branches []git.Branch, paint ui.Painter) [][]string {
 	now := a.opts.Now()
 	rows := make([][]string, len(branches))
 	for i, b := range branches {
@@ -99,7 +108,7 @@ func (a *app) rows(branches []git.Branch) [][]string {
 		if b.Current {
 			marker = "* "
 		}
-		rows[i] = []string{marker + b.Name, a.opts.Paint.Dim(ui.RelTime(b.CommitTime, now))}
+		rows[i] = []string{marker + b.Name, paint.Dim(ui.RelTime(b.CommitTime, now))}
 	}
 	return rows
 }
