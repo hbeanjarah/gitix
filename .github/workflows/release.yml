@@ -22,5 +22,8 @@ jobs:
           version: "~> v2"
           args: release --clean
         env:
+          # Release the pushed tag, even when another tag points to the same commit
+          # (e.g. v0.1.0 on the same commit as v0.1.0-beta.2).
+          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
