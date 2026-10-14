@@ -8,31 +8,6 @@ import (
 	"github.com/hbeanjarah/gitix/internal/testrepo"
 )
 
-func TestResolveBaseUsesOriginHEAD(t *testing.T) {
-	r := testrepo.New(t)
-	base, err := git.New(git.ExecRunner{Dir: r.Dir}).ResolveBase("")
-	if err != nil || base != "origin/main" {
-		t.Errorf("got %q, %v", base, err)
-	}
-}
-
-func TestResolveBaseFallsBackToMain(t *testing.T) {
-	r := testrepo.New(t)
-	r.Git("remote", "set-head", "origin", "--delete")
-	base, err := git.New(git.ExecRunner{Dir: r.Dir}).ResolveBase("")
-	if err != nil || base != "main" {
-		t.Errorf("got %q, %v", base, err)
-	}
-}
-
-func TestResolveBaseRejectsUnknownBranch(t *testing.T) {
-	r := testrepo.New(t)
-	_, err := git.New(git.ExecRunner{Dir: r.Dir}).ResolveBase("nope")
-	if err != git.ErrNotFound {
-		t.Errorf("want ErrNotFound, got %v", err)
-	}
-}
-
 func TestBases(t *testing.T) {
 	protected := []string{"main", "master", "develop"}
 	cases := []struct {

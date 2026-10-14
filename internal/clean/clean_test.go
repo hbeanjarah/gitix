@@ -3,6 +3,7 @@ package clean
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/hbeanjarah/gitix/internal/git"
 )
@@ -13,7 +14,7 @@ func factsFrom(m map[string]Fact) func(git.Branch) (Fact, error) {
 }
 
 func groupOf(p Plan, name string) (string, string) {
-	for group, items := range map[string][]Item{"kept": p.Kept, "safe": p.Safe, "risky": p.Risky} {
+	for group, items := range map[string][]Item{"kept": p.Kept, "merged": p.Merged, "not merged": p.NotMerged} {
 		for _, it := range items {
 			if it.Branch.Name == name {
 				return group, it.Reason
@@ -23,16 +24,24 @@ func groupOf(p Plan, name string) (string, string) {
 	return "absent", ""
 }
 
+func names(items []Item) []string {
+	var out []string
+	for _, it := range items {
+		out = append(out, it.Branch.Name)
+	}
+	return out
+}
+
 func TestKeepMatchesExactNamesOnly(t *testing.T) {
 	bs := []git.Branch{{Name: "main"}, {Name: "feat/maintenance"}, {Name: "fix/domain-model"}}
-	p, err := Build(bs, []string{"main"}, "origin/main", factsFrom(map[string]Fact{
-		"feat/maintenance": {Merged: true},
-		"fix/domain-model": {Merged: true},
+	p, err := Build(bs, []string{"main"}, factsFrom(map[string]Fact{
+		"feat/maintenance": {Base: "origin/main"},
+		"fix/domain-model": {Base: "origin/main"},
 	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	for name, want := range map[string]string{"main": "kept", "feat/maintenance": "safe", "fix/domain-model": "safe"} {
+	for name, want := range map[string]string{"main": "kept", "feat/maintenance": "merged", "fix/domain-model": "merged"} {
 		if got, _ := groupOf(p, name); got != want {
 			t.Errorf("%s: want %s, got %s", name, want, got)
 		}
@@ -42,9 +51,9 @@ func TestKeepMatchesExactNamesOnly(t *testing.T) {
 func TestCurrentAndWorktreeAreAlwaysKept(t *testing.T) {
 	bs := []git.Branch{{Name: "feat/here", Current: true}, {Name: "feat/there", Worktree: true}}
 	called := false
-	p, err := Build(bs, nil, "main", func(git.Branch) (Fact, error) {
+	p, err := Build(bs, nil, func(git.Branch) (Fact, error) {
 		called = true
-		return Fact{Merged: true}, nil
+		return Fact{Base: "main"}, nil
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -57,28 +66,37 @@ func TestCurrentAndWorktreeAreAlwaysKept(t *testing.T) {
 func TestClassification(t *testing.T) {
 	bs := []git.Branch{
 		{Name: "merged", Upstream: "origin/merged"},
+		{Name: "in-develop", Upstream: "origin/in-develop"},
 		{Name: "squashed", Upstream: "origin/squashed", UpstreamGone: true},
+		{Name: "local-base"},
 		{Name: "local-only"},
+		{Name: "one-commit"},
 		{Name: "gone-unmerged", Upstream: "origin/gone-unmerged", UpstreamGone: true},
 		{Name: "pushed-unmerged", Upstream: "origin/pushed-unmerged"},
 		{Name: "origin/remote", Remote: true},
 	}
-	p, err := Build(bs, nil, "origin/main", factsFrom(map[string]Fact{
-		"merged":          {Merged: true},
-		"squashed":        {Squash: true, NotIn: 2},
+	p, err := Build(bs, nil, factsFrom(map[string]Fact{
+		"merged":          {Base: "origin/master"},
+		"in-develop":      {Base: "origin/develop"},
+		"squashed":        {Base: "origin/develop", Squash: true},
+		"local-base":      {Base: "main"},
 		"local-only":      {NotIn: 3},
-		"gone-unmerged":   {NotIn: 1},
-		"pushed-unmerged": {NotIn: 5},
+		"one-commit":      {NotIn: 1},
+		"gone-unmerged":   {NotIn: 5},
+		"pushed-unmerged": {NotIn: 4},
 	}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := map[string][2]string{
-		"merged":          {"safe", "merged"},
-		"squashed":        {"safe", "merged (squash)"},
-		"local-only":      {"risky", "3 commits never pushed"},
-		"gone-unmerged":   {"risky", "remote deleted, 1 commit not in origin/main"},
-		"pushed-unmerged": {"risky", "5 commits not in origin/main"},
+		"merged":          {"merged", "merged → master"},
+		"in-develop":      {"merged", "merged → develop"},
+		"squashed":        {"merged", "merged (squash) → develop"},
+		"local-base":      {"merged", "merged → main"},
+		"local-only":      {"not merged", "3 commits, never pushed"},
+		"one-commit":      {"not merged", "1 commit, never pushed"},
+		"gone-unmerged":   {"not merged", "5 commits, remote deleted"},
+		"pushed-unmerged": {"not merged", "4 commits not merged"},
 		"origin/remote":   {"absent", ""},
 	}
 	for name, w := range want {
@@ -89,8 +107,28 @@ func TestClassification(t *testing.T) {
 	}
 }
 
+func TestGroupsAreSortedMostRecentFirst(t *testing.T) {
+	day := func(n int) time.Time { return time.Date(2026, 1, n, 0, 0, 0, 0, time.UTC) }
+	bs := []git.Branch{
+		{Name: "m-old", CommitTime: day(1)}, {Name: "m-new", CommitTime: day(3)},
+		{Name: "n-old", CommitTime: day(1)}, {Name: "n-new", CommitTime: day(3)},
+	}
+	p, err := Build(bs, nil, factsFrom(map[string]Fact{
+		"m-old": {Base: "main"}, "m-new": {Base: "main"},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := names(p.Merged); len(got) != 2 || got[0] != "m-new" {
+		t.Errorf("merged: got %v", got)
+	}
+	if got := names(p.NotMerged); len(got) != 2 || got[0] != "n-new" {
+		t.Errorf("not merged: got %v", got)
+	}
+}
+
 func TestFactErrorStopsTheBuild(t *testing.T) {
-	_, err := Build([]git.Branch{{Name: "x"}}, nil, "main", func(git.Branch) (Fact, error) {
+	_, err := Build([]git.Branch{{Name: "x"}}, nil, func(git.Branch) (Fact, error) {
 		return Fact{}, errors.New("boom")
 	})
 	if err == nil || err.Error() != "x: boom" {

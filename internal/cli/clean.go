@@ -15,8 +15,7 @@ import (
 var defaultKeep = []string{"main", "master", "develop"}
 
 type cleanFlags struct {
-	keep               []string
-	base               string
+	keep, base         []string
 	dryRun, yes, force bool
 }
 
@@ -25,17 +24,17 @@ func (a *app) cleanCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "clean",
 		Short: "Delete local branches, except the current, protected and kept ones",
-		Example: "  gitix clean                 review and confirm before deleting\n" +
+		Example: "  gitix clean                 pick the branches to delete\n" +
 			"  gitix clean --keep feat/x   also keep feat/x\n" +
 			"  gitix clean --dry-run       show what would be deleted",
 		Args: usageArgs(cobra.NoArgs),
 		RunE: func(cmd *cobra.Command, args []string) error { return a.runClean(f) },
 	}
 	cmd.Flags().StringSliceVar(&f.keep, "keep", nil, "branches to keep (exact names, comma-separated or repeated)")
-	cmd.Flags().StringVar(&f.base, "base", "", "branch to compare against (default: origin/HEAD, main, then master)")
+	cmd.Flags().StringSliceVar(&f.base, "base", nil, "branches to compare against, repeatable (default: origin/HEAD and the protected branches on origin)")
 	cmd.Flags().BoolVar(&f.dryRun, "dry-run", false, "show the plan without deleting anything")
-	cmd.Flags().BoolVar(&f.yes, "yes", false, "delete safe branches without asking (risky ones are skipped)")
-	cmd.Flags().BoolVar(&f.force, "force", false, "with --yes, also delete risky branches")
+	cmd.Flags().BoolVar(&f.yes, "yes", false, "delete merged branches without asking (not merged ones are skipped)")
+	cmd.Flags().BoolVar(&f.force, "force", false, "with --yes, also delete branches that are not merged")
 	cmd.RegisterFlagCompletionFunc("keep", a.completeBranches)
 	cmd.RegisterFlagCompletionFunc("base", a.completeBranches)
 	return cmd
@@ -45,77 +44,74 @@ func (a *app) runClean(f cleanFlags) error {
 	if err := a.ready(); err != nil {
 		return err
 	}
-	base, err := a.repo.ResolveBase(f.base)
-	if errors.Is(err, git.ErrNotFound) {
-		if f.base != "" {
-			return fail("base branch %q not found", f.base)
-		}
-		return fail("cannot find the base branch (no origin/HEAD, main or master); use --base <branch>")
-	}
+	protected, err := a.protected()
 	if err != nil {
 		return fail("%v", err)
 	}
-	keep, err := a.keepList(f.keep, base)
+	bases, err := a.bases(f.base, protected)
 	if err != nil {
-		return fail("%v", err)
+		return err
 	}
 	branches, err := a.repo.Branches(false)
 	if err != nil {
 		return fail("%v", err)
 	}
-
-	plan, err := clean.Build(branches, keep, base, a.facts(base))
-
+	if a.opts.Interactive {
+		fmt.Fprintf(a.opts.Err, "Analyzing %s…", count(len(branches), "branch"))
+	}
+	plan, err := clean.Build(branches, keepList(protected, f.keep, bases), a.facts(bases))
+	if a.opts.Interactive {
+		fmt.Fprint(a.opts.Err, "\r\x1b[2K") // erase the "Analyzing" line
+	}
 	if err != nil {
 		return fail("%v", err)
 	}
 
-	out, paint := a.opts.Out, a.opts.Paint
-	fmt.Fprintf(out, "Base: %s\n\n", base)
-	if len(plan.Safe) == 0 && len(plan.Risky) == 0 {
-		fmt.Fprintln(out, "Nothing to clean")
+	out := a.opts.Out
+	label := "Base"
+	if len(bases) > 1 {
+		label = "Bases"
+	}
+	fmt.Fprintf(out, "%s: %s\n\n", label, strings.Join(bases, ", "))
+	if len(plan.Merged) == 0 && len(plan.NotMerged) == 0 {
+		fmt.Fprintln(out, "Nothing to clean.")
 		return nil
 	}
-	if len(plan.Safe) > 0 {
-		fmt.Fprintf(out, "%s\n", paint.Green(fmt.Sprintf("Safe to delete (already in %s):", base)))
-		ui.Table(out, itemRows(plan.Safe))
-	}
-	if len(plan.Risky) > 0 {
-		fmt.Fprintf(out, "%s\n", paint.Yellow(fmt.Sprintf("⚠ Risky (work not in %s):", base)))
-		ui.Table(out, itemRows(plan.Risky))
-	}
-	fmt.Fprintln(out)
-	if f.dryRun {
-		fmt.Fprintln(out, "Dry run: nothing deleted")
+	// Both groups share one table so their columns line up.
+	lines := ui.Columns(a.itemRows(deletable(plan), a.opts.Paint))
+	a.printGroup(a.opts.Paint.Green("Merged"), lines[:len(plan.Merged)])
+	a.printGroup(a.opts.Paint.Yellow("Not merged"), lines[len(plan.Merged):])
+	switch {
+	case f.dryRun:
+		fmt.Fprintln(out, "Dry run: nothing deleted.")
 		return nil
+	case !f.yes:
+		return fail("not a terminal, use --yes to delete")
 	}
-
-	var toDelete []clean.Item
-	if len(plan.Safe) > 0 {
-		ok := f.yes
-		if !ok {
-			if ok, err = ui.Confirm(a.in, out, fmt.Sprintf("Delete %s?", count(len(plan.Safe), "safe branch"))); err != nil {
-				return fail("no answer, nothing deleted")
-			}
-		}
-		if ok {
-			toDelete = append(toDelete, plan.Safe...)
-		}
-	}
-	if len(plan.Risky) > 0 {
-		ok := f.yes && f.force
-		if !f.yes {
-			if ok, err = ui.Confirm(a.in, out, fmt.Sprintf("Also delete %s?", count(len(plan.Risky), "risky branch"))); err != nil {
-				return fail("no answer, nothing deleted")
-			}
-		} else if !f.force {
-			fmt.Fprintf(out, "Skipped %s (add --force to delete them)\n", count(len(plan.Risky), "risky branch"))
-		}
-		if ok {
-			toDelete = append(toDelete, plan.Risky...)
-		}
+	toDelete := plan.Merged
+	if f.force {
+		toDelete = append(toDelete, plan.NotMerged...)
+	} else if len(plan.NotMerged) > 0 {
+		fmt.Fprintf(out, "Skipped %s (use --force to delete them).\n", count(len(plan.NotMerged), "not merged branch"))
 	}
 	return a.deleteAll(toDelete)
+}
+
+// deletable lists the merged branches, then the not merged ones.
+func deletable(plan clean.Plan) []clean.Item {
+	return append(append([]clean.Item{}, plan.Merged...), plan.NotMerged...)
+}
+
+// printGroup writes "title (n)", the indented lines and a blank line; no lines print nothing.
+func (a *app) printGroup(title string, lines []string) {
+	if len(lines) == 0 {
+		return
+	}
+	fmt.Fprintf(a.opts.Out, "%s (%d)\n", title, len(lines))
+	for _, line := range lines {
+		fmt.Fprintln(a.opts.Out, "  "+line)
+	}
+	fmt.Fprintln(a.opts.Out)
 }
 
 func (a *app) deleteAll(items []clean.Item) error {
@@ -138,38 +134,82 @@ func (a *app) deleteAll(items []clean.Item) error {
 	return nil
 }
 
-// keepList merges the gitix.keep config (or the defaults), --keep and the base branch.
-func (a *app) keepList(flagKeep []string, base string) ([]string, error) {
+// protected returns the gitix.keep config, or the default protected branches.
+func (a *app) protected() ([]string, error) {
 	keep, ok, err := a.repo.KeepConfig()
-	if err != nil {
-		return nil, err
+	if err != nil || !ok {
+		return defaultKeep, err
 	}
-	if !ok {
-		keep = defaultKeep
-	}
-	keep = append(append([]string{}, keep...), flagKeep...)
-	return append(keep, base, strings.TrimPrefix(base, "origin/")), nil
+	return keep, nil
 }
 
-func (a *app) facts(base string) func(git.Branch) (clean.Fact, error) {
-	return func(b git.Branch) (clean.Fact, error) {
-		merged, err := a.repo.IsAncestor(b.Name, base)
-		if err != nil || merged {
-			return clean.Fact{Merged: merged}, err
+// bases returns the --base branches after checking they exist, or the detected ones.
+func (a *app) bases(explicit, protected []string) ([]string, error) {
+	if len(explicit) == 0 {
+		bases, err := a.repo.Bases(protected)
+		if errors.Is(err, git.ErrNotFound) {
+			return nil, fail("no base branch found, use --base")
 		}
-		squash, err := a.repo.SquashMerged(b.Name, base)
 		if err != nil {
-			return clean.Fact{}, err
+			return nil, fail("%v", err)
 		}
-		notIn, err := a.repo.CommitsNotIn(b.Name, base)
-		return clean.Fact{Squash: squash, NotIn: notIn}, err
+		return bases, nil
+	}
+	for _, base := range explicit {
+		if !a.repo.Exists(base) {
+			return nil, fail("base %q not found", base)
+		}
+	}
+	return explicit, nil
+}
+
+// keepList merges the protected branches, --keep and the bases (with and without "origin/").
+func keepList(protected, flagKeep, bases []string) []string {
+	keep := append(append([]string{}, protected...), flagKeep...)
+	for _, base := range bases {
+		keep = append(keep, base, strings.TrimPrefix(base, "origin/"))
+	}
+	return keep
+}
+
+// facts tests the bases in order: the first one that contains the branch wins.
+// A branch in none of them gets the fewest missing commits among the bases.
+func (a *app) facts(bases []string) func(git.Branch) (clean.Fact, error) {
+	return func(b git.Branch) (clean.Fact, error) {
+		var f clean.Fact
+		for i, base := range bases {
+			merged, err := a.repo.IsAncestor(b.Name, base)
+			if err != nil {
+				return clean.Fact{}, err
+			}
+			if merged {
+				return clean.Fact{Base: base}, nil
+			}
+			squash, err := a.repo.SquashMerged(b.Name, base)
+			if err != nil {
+				return clean.Fact{}, err
+			}
+			if squash {
+				return clean.Fact{Base: base, Squash: true}, nil
+			}
+			notIn, err := a.repo.CommitsNotIn(b.Name, base)
+			if err != nil {
+				return clean.Fact{}, err
+			}
+			if i == 0 || notIn < f.NotIn {
+				f.NotIn = notIn
+			}
+		}
+		return f, nil
 	}
 }
 
-func itemRows(items []clean.Item) [][]string {
+// itemRows renders items as [name, reason, age].
+func (a *app) itemRows(items []clean.Item, paint ui.Painter) [][]string {
+	now := a.opts.Now()
 	rows := make([][]string, len(items))
 	for i, it := range items {
-		rows[i] = []string{it.Branch.Name, it.Reason}
+		rows[i] = []string{it.Branch.Name, it.Reason, paint.Dim(ui.RelTime(it.Branch.CommitTime, now))}
 	}
 	return rows
 }

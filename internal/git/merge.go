@@ -5,26 +5,6 @@ import (
 	"strings"
 )
 
-// ResolveBase returns the branch to compare against: explicit if given,
-// otherwise origin/HEAD, then main, then master.
-func (r *Repo) ResolveBase(explicit string) (string, error) {
-	if explicit != "" {
-		if !r.Exists(explicit) {
-			return "", ErrNotFound
-		}
-		return explicit, nil
-	}
-	if out, err := r.run.Run("symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"); err == nil && out != "" {
-		return out, nil
-	}
-	for _, name := range []string{"main", "master"} {
-		if r.Exists(name) {
-			return name, nil
-		}
-	}
-	return "", ErrNotFound
-}
-
 // Bases returns the branches to compare against: origin/HEAD, then each protected
 // branch that exists on origin, without duplicates. When none is found on origin,
 // it falls back to the protected branches that exist locally.

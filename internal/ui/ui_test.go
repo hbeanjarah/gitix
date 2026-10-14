@@ -61,6 +61,20 @@ func TestChooseEndOfInput(t *testing.T) {
 	}
 }
 
+func TestColumns(t *testing.T) {
+	got := Columns([][]string{{"feat/a", "merged", "2 days ago"}, {"feat/longer", "3 commits", "1 year ago"}})
+	want := []string{
+		"feat/a        merged      2 days ago",
+		"feat/longer   3 commits   1 year ago",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("want\n%s\ngot\n%s", strings.Join(want, "\n"), strings.Join(got, "\n"))
+	}
+	if Columns(nil) != nil {
+		t.Errorf("no rows should give no lines")
+	}
+}
+
 func TestPainterDisabledIsPlain(t *testing.T) {
 	if got := (Painter{}).Yellow("x"); got != "x" {
 		t.Errorf("got %q", got)
