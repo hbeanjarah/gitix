@@ -9,6 +9,7 @@ import (
 
 	"github.com/hbeanjarah/gitix/internal/clean"
 	"github.com/hbeanjarah/gitix/internal/git"
+	"github.com/hbeanjarah/gitix/internal/pick"
 	"github.com/hbeanjarah/gitix/internal/ui"
 )
 
@@ -77,6 +78,10 @@ func (a *app) runClean(f cleanFlags) error {
 		fmt.Fprintln(out, "Nothing to clean.")
 		return nil
 	}
+	if a.opts.Interactive && !f.yes && !f.dryRun {
+		return a.pickAndDelete(plan)
+	}
+
 	// Both groups share one table so their columns line up.
 	lines := ui.Columns(a.itemRows(deletable(plan), a.opts.Paint))
 	a.printGroup(a.opts.Paint.Green("Merged"), lines[:len(plan.Merged)])
@@ -93,6 +98,43 @@ func (a *app) runClean(f cleanFlags) error {
 		toDelete = append(toDelete, plan.NotMerged...)
 	} else if len(plan.NotMerged) > 0 {
 		fmt.Fprintf(out, "Skipped %s (use --force to delete them).\n", count(len(plan.NotMerged), "not merged branch"))
+	}
+	return a.deleteAll(toDelete)
+}
+
+// pickAndDelete lets the user check the branches to delete. Merged ones are checked first.
+func (a *app) pickAndDelete(plan clean.Plan) error {
+	items := deletable(plan)
+	labels := ui.Columns(a.itemRows(items, ui.Painter{}))
+	choices := make([]pick.Choice, len(items))
+	for i, label := range labels {
+		choices[i] = pick.Choice{Label: label, Selected: i < len(plan.Merged)}
+	}
+	picked, err := a.opts.Picker.Many("Select branches to delete", choices)
+	if errors.Is(err, pick.ErrCancelled) {
+		return &ExitError{Code: 130}
+	}
+	if err != nil {
+		return fail("%v", err)
+	}
+	if len(picked) == 0 {
+		fmt.Fprintln(a.opts.Out, "Nothing selected.")
+		return nil
+	}
+	var toDelete []clean.Item
+	notMerged := 0
+	for _, i := range picked {
+		toDelete = append(toDelete, items[i])
+		if i >= len(plan.Merged) {
+			notMerged++
+		}
+	}
+	if notMerged > 0 {
+		question := fmt.Sprintf("Delete %s, including %d not merged?", count(len(toDelete), "branch"), notMerged)
+		if ok, _ := ui.Confirm(a.in, a.opts.Out, question); !ok {
+			fmt.Fprintln(a.opts.Out, "Nothing deleted.")
+			return nil
+		}
 	}
 	return a.deleteAll(toDelete)
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/hbeanjarah/gitix/internal/git"
+	"github.com/hbeanjarah/gitix/internal/pick"
 	"github.com/hbeanjarah/gitix/internal/ui"
 )
 
@@ -21,6 +22,7 @@ type Options struct {
 	Out, Err    io.Writer
 	Interactive bool // stdin and stdout are a terminal
 	Paint       ui.Painter
+	Picker      pick.Picker // interactive lists, used only when Interactive
 	Now         func() time.Time
 	Version     string
 }

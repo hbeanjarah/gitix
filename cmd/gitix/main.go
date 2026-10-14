@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/hbeanjarah/gitix/internal/cli"
+	"github.com/hbeanjarah/gitix/internal/pick"
 	"github.com/hbeanjarah/gitix/internal/ui"
 )
 
@@ -23,6 +24,7 @@ func main() {
 		Err:         os.Stderr,
 		Interactive: ui.IsTerminal(os.Stdin) && ui.IsTerminal(os.Stdout),
 		Paint:       ui.NewPainter(os.Stdout),
+		Picker:      pick.Huh{In: os.Stdin, Out: os.Stdout},
 		Now:         time.Now,
 		Version:     fmt.Sprintf("%s (commit %s, built %s)", version, commit, date),
 	}
