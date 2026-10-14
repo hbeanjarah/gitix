@@ -39,16 +39,24 @@ type Huh struct {
 
 func (h Huh) Many(title string, choices []Choice) ([]int, error) {
 	var picked []int
-	field := huh.NewMultiSelect[int]().
-		Options(options(choices)...).
-		Value(&picked).
-		Filterable(true).
-		Height(min(len(choices), maxHeight) + 2) // + title and filter lines
-	field.TitleFunc(func() string {
-		return fmt.Sprintf("%s  %d of %d selected", title, len(picked), len(choices))
-	}, &picked)
+	field := manyField(title, choices, &picked)
 	err := h.run(huh.NewForm(huh.NewGroup(keys{filterField: field, all: true})))
 	return picked, err
+}
+
+// manyField builds the checklist; picked receives the checked indexes.
+func manyField(title string, choices []Choice, picked *[]int) *huh.MultiSelect[int] {
+	field := huh.NewMultiSelect[int]().
+		Options(options(choices)...).
+		Value(picked).
+		Filterable(true).
+		Height(min(len(choices), maxHeight) + 2) // + title and filter lines
+	counter := func() string {
+		return fmt.Sprintf("%s  %d of %d selected", title, len(*picked), len(choices))
+	}
+	// huh only computes a title func once the bindings change: show it from the start too.
+	field.Title(counter()).TitleFunc(counter, picked)
+	return field
 }
 
 func (h Huh) One(title string, choices []Choice) (int, error) {

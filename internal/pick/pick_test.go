@@ -6,6 +6,8 @@ import (
 	"io"
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/huh"
 )
 
 // Keys as a terminal sends them.
@@ -71,6 +73,16 @@ func TestEscAfterAnEmptyFilterCancels(t *testing.T) {
 	_, err := Huh{In: &keyReader{[]string{"/", esc, esc}}, Out: &bytes.Buffer{}}.Many("Select", three)
 	if err != ErrCancelled {
 		t.Errorf("want ErrCancelled, got %v", err)
+	}
+}
+
+func TestManyShowsTheCounterFromTheStart(t *testing.T) {
+	// With nothing checked, huh never computes a dynamic title by itself.
+	var picked []int
+	field := manyField("Select", []Choice{{"alpha", false}, {"beta", false}}, &picked)
+	field.WithTheme(huh.ThemeCharm())
+	if view := field.View(); !strings.Contains(view, "Select  0 of 2 selected") {
+		t.Errorf("title missing:\n%s", view)
 	}
 }
 

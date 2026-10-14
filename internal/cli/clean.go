@@ -118,7 +118,7 @@ func (a *app) pickAndDelete(plan clean.Plan) error {
 		return fail("%v", err)
 	}
 	if len(picked) == 0 {
-		fmt.Fprintln(a.opts.Out, "Nothing selected.")
+		fmt.Fprintln(a.opts.Out, "Nothing selected (press space to check a branch).")
 		return nil
 	}
 	var toDelete []clean.Item
