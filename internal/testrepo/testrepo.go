@@ -10,8 +10,9 @@ import (
 
 // Repo is a working clone at Dir whose "origin" is a local bare repository.
 type Repo struct {
-	t   testing.TB
-	Dir string
+	t      testing.TB
+	Dir    string
+	Remote string // the bare repository behind "origin"
 }
 
 // New creates a bare remote and a clone with one commit on main, pushed,
@@ -28,7 +29,7 @@ func New(t testing.TB) *Repo {
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
 
 	remote := filepath.Join(root, "remote.git")
-	r := &Repo{t: t, Dir: filepath.Join(root, "work")}
+	r := &Repo{t: t, Dir: filepath.Join(root, "work"), Remote: remote}
 	run(t, root, "init", "--bare", remote)
 	run(t, root, "clone", remote, r.Dir)
 	r.Commit("README.md", "hello")
@@ -70,6 +71,16 @@ func (r *Repo) SquashMerge(name string) {
 	r.Git("push", "origin", "main")
 }
 
+// RebaseMerge replays each commit of name onto main with new SHAs, like GitHub's
+// "Rebase and merge" after main moved, pushes main and stays on main.
+func (r *Repo) RebaseMerge(name string) {
+	r.t.Helper()
+	r.Git("switch", "main")
+	r.Commit("main-moved-"+strings.ReplaceAll(name, "/", "-")+".txt", "main moved on")
+	r.Git("cherry-pick", "main.."+name)
+	r.Git("push", "origin", "main")
+}
+
 // Merge merges name into main with a merge commit, pushes main and stays on main.
 func (r *Repo) Merge(name string) {
 	r.t.Helper()
@@ -87,6 +98,16 @@ func (r *Repo) Backdate(date string) {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		r.t.Fatalf("backdate: %v\n%s", err, out)
 	}
+}
+
+// TeammateMerges merges name into main from another clone and pushes it, like a PR
+// merged on GitHub: the working clone does not know until it fetches.
+func (r *Repo) TeammateMerges(name string) {
+	r.t.Helper()
+	dir := filepath.Join(r.t.TempDir(), "teammate")
+	run(r.t, filepath.Dir(dir), "clone", r.Remote, dir)
+	run(r.t, dir, "merge", "--no-ff", "-m", "merge "+name, "origin/"+name)
+	run(r.t, dir, "push", "origin", "main")
 }
 
 // DeleteRemote deletes name on origin and prunes it locally, like after a merged PR.

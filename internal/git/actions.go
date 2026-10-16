@@ -57,15 +57,41 @@ func (r *Repo) Version() (int, int, error) {
 	return major, minor, nil
 }
 
+// ConfigBool returns `git config --type=bool <key>`, or def when unset.
+func (r *Repo) ConfigBool(key string, def bool) (bool, error) {
+	out, err := r.run.Run("config", "--type=bool", "--get", key)
+	if exitCode(err) == 1 {
+		return def, nil
+	}
+	if err != nil {
+		return def, err
+	}
+	return out == "true", nil
+}
+
+// HasRemote reports whether a remote with this name is configured.
+func (r *Repo) HasRemote(name string) bool {
+	_, err := r.run.Run("config", "--get", "remote."+name+".url")
+	return err == nil
+}
+
+// Fetch updates the remote-tracking branches of remote. It never prunes: what the
+// user's own fetch.prune setting says still applies, gitix adds nothing.
+func (r *Repo) Fetch(remote string) error {
+	_, err := r.run.Run("fetch", "--quiet", "--", remote)
+	return err
+}
+
 // InsideRepo reports whether the working directory is inside a git repository.
 func (r *Repo) InsideRepo() bool {
 	_, err := r.run.Run("rev-parse", "--git-dir")
 	return err == nil
 }
 
-// KeepConfig returns the names listed in `git config gitix.keep`, or ok=false when unset or empty.
-func (r *Repo) KeepConfig() (names []string, ok bool, err error) {
-	out, err := r.run.Run("config", "--get", "gitix.keep")
+// ConfigList returns the names listed in `git config <key>`, separated by spaces or
+// commas, or ok=false when unset or empty.
+func (r *Repo) ConfigList(key string) (names []string, ok bool, err error) {
+	out, err := r.run.Run("config", "--get", key)
 	if exitCode(err) == 1 {
 		return nil, false, nil // key not set
 	}
@@ -73,5 +99,5 @@ func (r *Repo) KeepConfig() (names []string, ok bool, err error) {
 		return nil, false, err
 	}
 	names = strings.FieldsFunc(out, func(c rune) bool { return c == ',' || c == ' ' || c == '\t' })
-	return names, len(names) > 0, nil // an empty value does not remove every protection
+	return names, len(names) > 0, nil // an empty gitix.keep must not remove every protection
 }

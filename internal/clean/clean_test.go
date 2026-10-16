@@ -2,6 +2,8 @@ package clean
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -37,7 +39,7 @@ func TestKeepMatchesExactNamesOnly(t *testing.T) {
 	p, err := Build(bs, []string{"main"}, factsFrom(map[string]Fact{
 		"feat/maintenance": {Base: "origin/main"},
 		"fix/domain-model": {Base: "origin/main"},
-	}))
+	}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +56,7 @@ func TestCurrentAndWorktreeAreAlwaysKept(t *testing.T) {
 	p, err := Build(bs, nil, func(git.Branch) (Fact, error) {
 		called = true
 		return Fact{Base: "main"}, nil
-	})
+	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,6 +70,7 @@ func TestClassification(t *testing.T) {
 		{Name: "merged", Upstream: "origin/merged"},
 		{Name: "in-develop", Upstream: "origin/in-develop"},
 		{Name: "squashed", Upstream: "origin/squashed", UpstreamGone: true},
+		{Name: "rebased", Upstream: "origin/rebased"},
 		{Name: "local-base"},
 		{Name: "local-only"},
 		{Name: "one-commit"},
@@ -79,12 +82,13 @@ func TestClassification(t *testing.T) {
 		"merged":          {Base: "origin/master"},
 		"in-develop":      {Base: "origin/develop"},
 		"squashed":        {Base: "origin/develop", Squash: true},
+		"rebased":         {Base: "origin/develop", Rebase: true},
 		"local-base":      {Base: "main"},
-		"local-only":      {NotIn: 3},
-		"one-commit":      {NotIn: 1},
-		"gone-unmerged":   {NotIn: 5},
-		"pushed-unmerged": {NotIn: 4},
-	}))
+		"local-only":      {NotIn: 3, NotInBase: "origin/develop"},
+		"one-commit":      {NotIn: 1, NotInBase: "origin/master"},
+		"gone-unmerged":   {NotIn: 5, NotInBase: "origin/develop"},
+		"pushed-unmerged": {NotIn: 4, NotInBase: "main"},
+	}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,11 +96,12 @@ func TestClassification(t *testing.T) {
 		"merged":          {"merged", "merged → master"},
 		"in-develop":      {"merged", "merged → develop"},
 		"squashed":        {"merged", "merged (squash) → develop"},
+		"rebased":         {"merged", "merged (rebase) → develop"},
 		"local-base":      {"merged", "merged → main"},
-		"local-only":      {"not merged", "3 commits, never pushed"},
-		"one-commit":      {"not merged", "1 commit, never pushed"},
-		"gone-unmerged":   {"not merged", "5 commits, remote deleted"},
-		"pushed-unmerged": {"not merged", "4 commits not merged"},
+		"local-only":      {"not merged", "3 commits not in develop, never pushed"},
+		"one-commit":      {"not merged", "1 commit not in master, never pushed"},
+		"gone-unmerged":   {"not merged", "5 commits not in develop, remote deleted"},
+		"pushed-unmerged": {"not merged", "4 commits not in main"},
 		"origin/remote":   {"absent", ""},
 	}
 	for name, w := range want {
@@ -115,7 +120,7 @@ func TestGroupsAreSortedMostRecentFirst(t *testing.T) {
 	}
 	p, err := Build(bs, nil, factsFrom(map[string]Fact{
 		"m-old": {Base: "main"}, "m-new": {Base: "main"},
-	}))
+	}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,8 +135,22 @@ func TestGroupsAreSortedMostRecentFirst(t *testing.T) {
 func TestFactErrorStopsTheBuild(t *testing.T) {
 	_, err := Build([]git.Branch{{Name: "x"}}, nil, func(git.Branch) (Fact, error) {
 		return Fact{}, errors.New("boom")
-	})
+	}, nil)
 	if err == nil || err.Error() != "x: boom" {
 		t.Errorf("got %v", err)
+	}
+}
+
+func TestBuildReportsProgress(t *testing.T) {
+	bs := []git.Branch{{Name: "main"}, {Name: "a"}, {Name: "b"}}
+	var calls []string
+	_, err := Build(bs, []string{"main"}, factsFrom(nil), func(done, total int) {
+		calls = append(calls, fmt.Sprintf("%d/%d", done, total))
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(calls, " "); got != "0/2 1/2 2/2" {
+		t.Errorf("kept branches are not analyzed: want 0/2 1/2 2/2, got %s", got)
 	}
 }

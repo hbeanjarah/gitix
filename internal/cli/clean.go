@@ -16,8 +16,8 @@ import (
 var defaultKeep = []string{"main", "master", "develop"}
 
 type cleanFlags struct {
-	keep, base         []string
-	dryRun, yes, force bool
+	keep, base                  []string
+	dryRun, yes, force, noFetch bool
 }
 
 func (a *app) cleanCmd() *cobra.Command {
@@ -36,6 +36,7 @@ func (a *app) cleanCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&f.dryRun, "dry-run", false, "show the plan without deleting anything")
 	cmd.Flags().BoolVar(&f.yes, "yes", false, "delete merged branches without asking (not merged ones are skipped)")
 	cmd.Flags().BoolVar(&f.force, "force", false, "with --yes, also delete branches that are not merged")
+	cmd.Flags().BoolVar(&f.noFetch, "no-fetch", false, "do not run git fetch origin first (or: git config gitix.fetch false)")
 	cmd.RegisterFlagCompletionFunc("keep", a.completeBranches)
 	cmd.RegisterFlagCompletionFunc("base", a.completeBranches)
 	return cmd
@@ -43,6 +44,9 @@ func (a *app) cleanCmd() *cobra.Command {
 
 func (a *app) runClean(f cleanFlags) error {
 	if err := a.ready(); err != nil {
+		return err
+	}
+	if err := a.fetch(f.noFetch); err != nil {
 		return err
 	}
 	protected, err := a.protected()
@@ -57,12 +61,14 @@ func (a *app) runClean(f cleanFlags) error {
 	if err != nil {
 		return fail("%v", err)
 	}
-	if a.opts.Interactive {
-		fmt.Fprintf(a.opts.Err, "Analyzing %s…", count(len(branches), "branch"))
+	var progress func(done, total int)
+	spin := a.spinner("Analyzing branches…")
+	if spin != nil {
+		progress = func(done, total int) { spin.Set(fmt.Sprintf("Analyzing branches  %d/%d", done, total)) }
 	}
-	plan, err := clean.Build(branches, keepList(protected, f.keep, bases), a.facts(bases))
-	if a.opts.Interactive {
-		fmt.Fprint(a.opts.Err, "\r\x1b[2K") // erase the "Analyzing" line
+	plan, err := clean.Build(branches, keepList(protected, f.keep, bases), a.facts(bases), progress)
+	if spin != nil {
+		spin.Stop() // before the list and the questions
 	}
 	if err != nil {
 		return fail("%v", err)
@@ -187,30 +193,69 @@ func (a *app) deleteAll(items []clean.Item) error {
 	return nil
 }
 
+// fetch runs `git fetch origin` so that merges made on the server are seen, unless
+// --no-fetch or gitix.fetch=false. A failed fetch only warns: local data still works.
+func (a *app) fetch(noFetch bool) error {
+	enabled, err := a.repo.ConfigBool("gitix.fetch", true)
+	if err != nil {
+		return fail("%v", err)
+	}
+	if noFetch || !enabled || !a.repo.HasRemote("origin") {
+		return nil
+	}
+	spin := a.spinner("Fetching origin…")
+	err = a.repo.Fetch("origin")
+	if spin != nil {
+		spin.Stop()
+	}
+	if err != nil {
+		reason, _, _ := strings.Cut(err.Error(), "\n")
+		fmt.Fprintf(a.opts.Err, "gitix: could not fetch origin, using local data (%s)\n", reason)
+	}
+	return nil
+}
+
+// spinner shows an animated status line in a terminal, and returns nil elsewhere.
+func (a *app) spinner(text string) *ui.Spinner {
+	if !a.opts.Interactive {
+		return nil
+	}
+	return ui.StartSpinner(a.opts.Err, a.opts.Paint, text)
+}
+
 // protected returns the gitix.keep config, or the default protected branches.
 func (a *app) protected() ([]string, error) {
-	keep, ok, err := a.repo.KeepConfig()
+	keep, ok, err := a.repo.ConfigList("gitix.keep")
 	if err != nil || !ok {
 		return defaultKeep, err
 	}
 	return keep, nil
 }
 
-// bases returns the --base branches after checking they exist, or the detected ones.
+// bases returns the --base branches, else the gitix.base ones, else the detected ones.
+// Given bases must exist.
 func (a *app) bases(explicit, protected []string) ([]string, error) {
+	from := ""
 	if len(explicit) == 0 {
-		bases, err := a.repo.Bases(protected)
-		if errors.Is(err, git.ErrNotFound) {
-			return nil, fail("no base branch found, use --base")
-		}
+		configured, ok, err := a.repo.ConfigList("gitix.base")
 		if err != nil {
 			return nil, fail("%v", err)
 		}
-		return bases, nil
+		explicit, from = configured, " from gitix.base"
+		if !ok {
+			bases, err := a.repo.Bases(protected)
+			if errors.Is(err, git.ErrNotFound) {
+				return nil, fail("no base branch found, use --base or set gitix.base")
+			}
+			if err != nil {
+				return nil, fail("%v", err)
+			}
+			return bases, nil
+		}
 	}
 	for _, base := range explicit {
 		if !a.repo.Exists(base) {
-			return nil, fail("base %q not found", base)
+			return nil, fail("base %q%s not found", base, from)
 		}
 	}
 	return explicit, nil
@@ -245,12 +290,19 @@ func (a *app) facts(bases []string) func(git.Branch) (clean.Fact, error) {
 			if squash {
 				return clean.Fact{Base: base, Squash: true}, nil
 			}
+			rebase, err := a.repo.RebaseMerged(b.Ref, base)
+			if err != nil {
+				return clean.Fact{}, err
+			}
+			if rebase {
+				return clean.Fact{Base: base, Rebase: true}, nil
+			}
 			notIn, err := a.repo.CommitsNotIn(b.Ref, base)
 			if err != nil {
 				return clean.Fact{}, err
 			}
 			if i == 0 || notIn < f.NotIn {
-				f.NotIn = notIn
+				f.NotIn, f.NotInBase = notIn, base
 			}
 		}
 		return f, nil

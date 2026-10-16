@@ -122,6 +122,7 @@ func (p Painter) paint(code, s string) string {
 func (p Painter) Green(s string) string  { return p.paint("32", s) }
 func (p Painter) Yellow(s string) string { return p.paint("33", s) }
 func (p Painter) Dim(s string) string    { return p.paint("2", s) }
+func (p Painter) Cyan(s string) string   { return p.paint("36", s) }
 
 // IsTerminal reports whether f is an interactive terminal.
 func IsTerminal(f *os.File) bool {

@@ -16,8 +16,8 @@ func TestVersion(t *testing.T) {
 	}
 }
 
-func TestKeepConfigSplitsOnSpacesAndCommas(t *testing.T) {
-	names, ok, err := New(fakeRunner{out: "main, develop staging"}).KeepConfig()
+func TestConfigListSplitsOnSpacesAndCommas(t *testing.T) {
+	names, ok, err := New(fakeRunner{out: "main, develop staging"}).ConfigList("gitix.keep")
 	if err != nil || !ok {
 		t.Fatalf("ok=%v err=%v", ok, err)
 	}
@@ -26,8 +26,8 @@ func TestKeepConfigSplitsOnSpacesAndCommas(t *testing.T) {
 	}
 }
 
-func TestKeepConfigUnset(t *testing.T) {
-	_, ok, err := New(fakeRunner{err: &Error{ExitCode: 1}}).KeepConfig()
+func TestConfigListUnset(t *testing.T) {
+	_, ok, err := New(fakeRunner{err: &Error{ExitCode: 1}}).ConfigList("gitix.keep")
 	if err != nil || ok {
 		t.Errorf("want ok=false err=nil, got ok=%v err=%v", ok, err)
 	}
