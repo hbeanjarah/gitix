@@ -10,6 +10,7 @@ import (
 	"strings"
 	"text/tabwriter"
 	"time"
+	"unicode"
 )
 
 // ErrNoAnswer means the input ended before a valid answer was given.
@@ -84,6 +85,20 @@ func ask(in *bufio.Reader, out io.Writer, prompt string) (string, error) {
 		return "", ErrNoAnswer
 	}
 	return strings.ToLower(strings.TrimSpace(answer)), nil
+}
+
+// Safe escapes control and invisible format characters, such as the bidi override
+// U+202E, so a branch name cannot hide or reorder what the terminal shows.
+func Safe(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
+			fmt.Fprintf(&b, "\\u%04X", r)
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 // Painter adds ANSI colors when enabled.

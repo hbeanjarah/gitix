@@ -1,7 +1,7 @@
 # Install gitix on Windows (PowerShell):
 #   irm https://raw.githubusercontent.com/hbeanjarah/gitix/main/install.ps1 | iex
 # Options (environment variables):
-#   GITIX_VERSION      tag to install, e.g. v0.1.0 (default: newest release, pre-releases included)
+#   GITIX_VERSION      tag to install, e.g. v0.2.0-beta.1 (default: latest stable release)
 #   GITIX_INSTALL_DIR  where to put gitix.exe (default: %LOCALAPPDATA%\Programs\gitix)
 
 $ErrorActionPreference = "Stop"
@@ -23,9 +23,12 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
 
 $tag = $env:GITIX_VERSION
 if (-not $tag) {
-    $releases = Invoke-RestMethod "https://api.github.com/repos/$repo/releases?per_page=1"
-    $tag = @($releases)[0].tag_name
+    # releases/latest skips pre-releases: betas are installed only on request.
+    $tag = (Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest").tag_name
     if (-not $tag) { throw "gitix install: cannot find the latest release" }
+}
+if ($tag -notmatch '^v[0-9][A-Za-z0-9.+-]*$') {
+    throw "gitix install: invalid version $tag, expected a tag such as v0.1.0"
 }
 $version = $tag.TrimStart("v")
 $archive = "gitix_${version}_windows_${arch}.zip"

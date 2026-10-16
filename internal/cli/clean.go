@@ -73,7 +73,7 @@ func (a *app) runClean(f cleanFlags) error {
 	if len(bases) > 1 {
 		label = "Bases"
 	}
-	fmt.Fprintf(out, "%s: %s\n\n", label, strings.Join(bases, ", "))
+	fmt.Fprintf(out, "%s: %s\n\n", label, ui.Safe(strings.Join(bases, ", ")))
 	if len(plan.Merged) == 0 && len(plan.NotMerged) == 0 {
 		fmt.Fprintln(out, "Nothing to clean.")
 		return nil
@@ -164,12 +164,19 @@ func (a *app) deleteAll(items []clean.Item) error {
 	out := a.opts.Out
 	var failed []string
 	for _, it := range items {
-		if err := a.repo.Delete(it.Branch.Name); err != nil {
-			failed = append(failed, it.Branch.Name)
-			fmt.Fprintf(a.opts.Err, "Could not delete %s: %v\n", it.Branch.Name, err)
+		name := ui.Safe(it.Branch.Name)
+		err := a.repo.Delete(it.Branch)
+		switch {
+		case errors.Is(err, git.ErrMoved):
+			failed = append(failed, name)
+			fmt.Fprintf(a.opts.Err, "%s changed since the analysis, kept\n", name)
+			continue
+		case err != nil:
+			failed = append(failed, name)
+			fmt.Fprintf(a.opts.Err, "Could not delete %s: %v\n", name, err)
 			continue
 		}
-		fmt.Fprintf(out, "Deleted %s (was %s)\n", it.Branch.Name, shortSHA(it.Branch.SHA))
+		fmt.Fprintf(out, "Deleted %s (was %s)\n", name, shortSHA(it.Branch.SHA))
 	}
 	if len(items) > len(failed) {
 		fmt.Fprintln(out, a.opts.Paint.Dim("Restore with: git branch <name> <sha>"))
@@ -224,21 +231,21 @@ func (a *app) facts(bases []string) func(git.Branch) (clean.Fact, error) {
 	return func(b git.Branch) (clean.Fact, error) {
 		var f clean.Fact
 		for i, base := range bases {
-			merged, err := a.repo.IsAncestor(b.Name, base)
+			merged, err := a.repo.IsAncestor(b.Ref, base)
 			if err != nil {
 				return clean.Fact{}, err
 			}
 			if merged {
 				return clean.Fact{Base: base}, nil
 			}
-			squash, err := a.repo.SquashMerged(b.Name, base)
+			squash, err := a.repo.SquashMerged(b.Ref, base)
 			if err != nil {
 				return clean.Fact{}, err
 			}
 			if squash {
 				return clean.Fact{Base: base, Squash: true}, nil
 			}
-			notIn, err := a.repo.CommitsNotIn(b.Name, base)
+			notIn, err := a.repo.CommitsNotIn(b.Ref, base)
 			if err != nil {
 				return clean.Fact{}, err
 			}
@@ -255,7 +262,7 @@ func (a *app) itemRows(items []clean.Item, paint ui.Painter) [][]string {
 	now := a.opts.Now()
 	rows := make([][]string, len(items))
 	for i, it := range items {
-		rows[i] = []string{it.Branch.Name, it.Reason, paint.Dim(ui.RelTime(it.Branch.CommitTime, now))}
+		rows[i] = []string{ui.Safe(it.Branch.Name), it.Reason, paint.Dim(ui.RelTime(it.Branch.CommitTime, now))}
 	}
 	return rows
 }

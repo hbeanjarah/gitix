@@ -82,3 +82,17 @@ func TestPainterDisabledIsPlain(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+func TestSafeEscapesInvisibleCharacters(t *testing.T) {
+	cases := map[string]string{
+		"feat/été":        "feat/été",
+		"feat/x\u202eexe": `feat/x\u202Eexe`,
+		"a\u200bb":        `a\u200Bb`,
+		"bell\a":          `bell\u0007`,
+	}
+	for in, want := range cases {
+		if got := Safe(in); got != want {
+			t.Errorf("Safe(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
