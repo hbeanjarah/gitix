@@ -28,7 +28,7 @@ func (r *Repo) Bases(protected []string) ([]string, error) {
 	}
 	if len(bases) == 0 {
 		for _, name := range protected {
-			if r.Exists("refs/heads/" + name) {
+			if !strings.HasPrefix(name, "-") && r.Exists("refs/heads/"+name) {
 				add(name)
 			}
 		}
@@ -39,11 +39,18 @@ func (r *Repo) Bases(protected []string) ([]string, error) {
 	return bases, nil
 }
 
-// Exists reports whether ref points to a commit.
+// Exists reports whether ref points to a commit. A ref starting with "-" never
+// exists: git would read it as an option.
 func (r *Repo) Exists(ref string) bool {
+	if strings.HasPrefix(ref, "-") {
+		return false
+	}
 	_, err := r.run.Run("rev-parse", "--verify", "--quiet", ref+"^{commit}")
 	return err == nil
 }
+
+// The functions below take refs that cannot start with "-", such as Branch.Ref
+// ("refs/heads/x") and bases checked by Exists, so git never reads them as options.
 
 // IsAncestor reports whether branch is fully contained in base (classic merge).
 func (r *Repo) IsAncestor(branch, base string) (bool, error) {

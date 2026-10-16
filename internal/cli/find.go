@@ -81,7 +81,7 @@ func (a *app) runFind(term string, remote, switchTo bool) error {
 		target = matches[i]
 	}
 	if target.Current {
-		fmt.Fprintf(a.opts.Out, "Already on %s\n", target.Name)
+		fmt.Fprintf(a.opts.Out, "Already on %s\n", ui.Safe(target.Name))
 		return nil
 	}
 	if err := a.repo.Switch(target); err != nil {
@@ -95,7 +95,7 @@ func (a *app) runFind(term string, remote, switchTo bool) error {
 	if target.Remote {
 		name = git.LocalName(name)
 	}
-	fmt.Fprintf(a.opts.Out, "Switched to %s\n", a.opts.Paint.Green(name))
+	fmt.Fprintf(a.opts.Out, "Switched to %s\n", a.opts.Paint.Green(ui.Safe(name)))
 	return nil
 }
 
@@ -108,7 +108,7 @@ func (a *app) rows(branches []git.Branch, paint ui.Painter) [][]string {
 		if b.Current {
 			marker = "* "
 		}
-		rows[i] = []string{marker + b.Name, paint.Dim(ui.RelTime(b.CommitTime, now))}
+		rows[i] = []string{marker + ui.Safe(b.Name), paint.Dim(ui.RelTime(b.CommitTime, now))}
 	}
 	return rows
 }

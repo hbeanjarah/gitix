@@ -10,19 +10,28 @@ import (
 // ErrNotFound means a ref does not exist.
 var ErrNotFound = errors.New("not found")
 
+// ErrMoved means a branch no longer points to the commit it had when it was read.
+var ErrMoved = errors.New("changed since it was read")
+
 // Switch checks out b. A remote branch gets a local tracking branch.
+// "--" keeps a name such as "-Cmain" from being read as an option.
 func (r *Repo) Switch(b Branch) error {
 	if b.Remote {
-		_, err := r.run.Run("switch", "--track", b.Name)
+		_, err := r.run.Run("switch", "--track", "--", b.Name)
 		return err
 	}
-	_, err := r.run.Run("switch", b.Name)
+	_, err := r.run.Run("switch", "--", b.Name)
 	return err
 }
 
-// Delete force-deletes a local branch. Safety checks are the caller's job.
-func (r *Repo) Delete(name string) error {
-	_, err := r.run.Run("branch", "-D", name)
+// Delete force-deletes a local branch, unless it moved since b was read: work
+// committed in the meantime is never lost. Other safety checks are the caller's job.
+func (r *Repo) Delete(b Branch) error {
+	sha, err := r.run.Run("rev-parse", "--verify", "--quiet", b.Ref)
+	if err != nil || sha != b.SHA {
+		return ErrMoved
+	}
+	_, err = r.run.Run("branch", "-D", "--", b.Name)
 	return err
 }
 
@@ -54,7 +63,7 @@ func (r *Repo) InsideRepo() bool {
 	return err == nil
 }
 
-// KeepConfig returns the names listed in `git config gitix.keep`, or ok=false when unset.
+// KeepConfig returns the names listed in `git config gitix.keep`, or ok=false when unset or empty.
 func (r *Repo) KeepConfig() (names []string, ok bool, err error) {
 	out, err := r.run.Run("config", "--get", "gitix.keep")
 	if exitCode(err) == 1 {
@@ -63,5 +72,6 @@ func (r *Repo) KeepConfig() (names []string, ok bool, err error) {
 	if err != nil {
 		return nil, false, err
 	}
-	return strings.FieldsFunc(out, func(c rune) bool { return c == ',' || c == ' ' || c == '\t' }), true, nil
+	names = strings.FieldsFunc(out, func(c rune) bool { return c == ',' || c == ' ' || c == '\t' })
+	return names, len(names) > 0, nil // an empty value does not remove every protection
 }

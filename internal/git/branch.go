@@ -9,6 +9,7 @@ import (
 // Branch is a local or remote-tracking branch.
 type Branch struct {
 	Name         string // short name: "feat/x" or "origin/feat/x"
+	Ref          string // full name: "refs/heads/feat/x"; pass it to git, it never starts with "-"
 	SHA          string
 	CommitTime   time.Time
 	Upstream     string // "" when the branch has no upstream
@@ -18,8 +19,9 @@ type Branch struct {
 	Worktree     bool   // checked out in another worktree
 }
 
-const branchFormat = "%(HEAD)%00%(refname)%00%(refname:short)%00%(objectname)%00" +
-	"%(committerdate:unix)%00%(upstream:short)%00%(upstream:track)%00%(worktreepath)"
+// lstrip=2 rather than :short, which turns "main" into "heads/main" when a tag is also named main.
+const branchFormat = "%(HEAD)%00%(refname)%00%(refname:lstrip=2)%00%(objectname)%00" +
+	"%(committerdate:unix)%00%(upstream:lstrip=2)%00%(upstream:track)%00%(worktreepath)"
 
 // Repo reads facts from a git repository and acts on it.
 type Repo struct {
@@ -59,6 +61,7 @@ func parseBranches(out string) []Branch {
 		current := head == "*"
 		branches = append(branches, Branch{
 			Name:         short,
+			Ref:          ref,
 			SHA:          sha,
 			CommitTime:   time.Unix(secs, 0),
 			Upstream:     upstream,

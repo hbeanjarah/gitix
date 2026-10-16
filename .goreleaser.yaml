@@ -3,7 +3,8 @@ project_name: gitix
 
 before:
   hooks:
-    - go mod tidy
+    # Check, never change: the released binary must match what CI tested.
+    - go mod verify
 
 builds:
   - main: ./cmd/gitix

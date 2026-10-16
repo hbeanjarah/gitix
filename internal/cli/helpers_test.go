@@ -22,11 +22,15 @@ type fakePicker struct {
 	err     error // returned instead, e.g. pick.ErrCancelled
 	calls   int
 	choices []pick.Choice
+	during  func() // runs while the list is open, e.g. to commit from "another terminal"
 }
 
 func (p *fakePicker) Many(title string, choices []pick.Choice) ([]int, error) {
 	p.calls++
 	p.choices = choices
+	if p.during != nil {
+		p.during()
+	}
 	return p.many, p.err
 }
 
