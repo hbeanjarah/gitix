@@ -96,3 +96,34 @@ func TestSafeEscapesInvisibleCharacters(t *testing.T) {
 		}
 	}
 }
+
+func TestSpinnerDrawsAtOnceAndErasesOnStop(t *testing.T) {
+	var buf bytes.Buffer
+	s := StartSpinner(&buf, Painter{}, "Fetching origin…")
+	s.Set("Analyzing branches  1/2")
+	s.Stop()
+	out := buf.String()
+	if !strings.Contains(out, frames[0]+" Fetching origin…") || !strings.Contains(out, "Analyzing branches  1/2") {
+		t.Errorf("both texts must be drawn right away:\n%q", out)
+	}
+	if !strings.HasSuffix(out, "\r\x1b[2K") {
+		t.Errorf("Stop must erase the line:\n%q", out)
+	}
+}
+
+func TestSpinnerShowsElapsedTimeWhenSlow(t *testing.T) {
+	var buf bytes.Buffer
+	now := time.Unix(1_700_000_000, 0)
+	s := startSpinner(&buf, Painter{}, "Fetching origin…", func() time.Time { return now })
+	now = now.Add(2 * time.Second)
+	s.Set("Fetching origin…")
+	if strings.Contains(buf.String(), "2s") {
+		t.Errorf("no time shown before 3s:\n%q", buf.String())
+	}
+	now = now.Add(2 * time.Second)
+	s.Set("Fetching origin…")
+	s.Stop()
+	if !strings.Contains(buf.String(), "Fetching origin… 4s") {
+		t.Errorf("want the elapsed time:\n%q", buf.String())
+	}
+}

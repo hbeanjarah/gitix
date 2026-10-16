@@ -19,9 +19,9 @@ $ gitix clean
 Bases: origin/main, origin/develop
 
 ┃ Select branches to delete  2 of 3 selected
-┃ > ✓ feat/trash-module   merged (squash) → develop   2 hours ago
-┃   ✓ fix/login           merged → main               5 days ago
-┃   • feat/wip            3 commits, never pushed     1 week ago
+┃ > ✓ feat/trash-module   merged (squash) → develop             2 hours ago
+┃   ✓ fix/login           merged → main                         5 days ago
+┃   • feat/wip            3 commits not in main, never pushed   1 week ago
 
 space toggle • ↑ up • ↓ down • / filter • enter confirm • a select all • esc cancel
 
@@ -81,12 +81,19 @@ Deletes local branches, except:
 Names are matched exactly: protecting `main` does not protect `feat/maintenance`.
 Remote branches are never touched.
 
+First, gitix runs `git fetch origin`, so that pull requests merged on the server are seen.
+It never deletes anything there (no `--prune`). Skip it with `--no-fetch`, or for good with
+`git config gitix.fetch false`.
+
 Each branch is compared with the **bases**: `origin/HEAD`, plus each protected branch that
 exists on `origin` (so with git flow, both `origin/main` and `origin/develop`):
 
-- **merged**: already in one of the bases, including squash merges, which plain git does not
-  detect. gitix shows which one: `merged (squash) → develop`.
-- **not merged**: has work that is in none of the bases: `3 commits, never pushed`.
+- **merged**: already in one of the bases, including squash and rebase merges, which plain git
+  does not detect. gitix shows which one: `merged (squash) → develop`, `merged (rebase) → main`.
+- **not merged**: has commits that are in none of the bases, counted against the closest one:
+  `3 commits not in develop, never pushed`.
+
+Wrong base? Pass `--base`, or set it for good with `git config gitix.base "origin/develop"`.
 
 In a terminal, `gitix clean` opens a list where merged branches are checked and the others are
 not. Check what you want and press enter: gitix recaps and asks before deleting. The answer
@@ -98,6 +105,7 @@ anything.
 | `--keep a,b` | also keep these branches |
 | `--base <branch>` | compare against this branch instead; repeat it for several bases |
 | `--dry-run` | show the plan, delete nothing |
+| `--no-fetch` | do not run `git fetch origin` first |
 | `--yes` | delete merged branches without asking (not merged ones are skipped) |
 | `--yes --force` | also delete not merged branches without asking |
 
@@ -107,11 +115,16 @@ Every deleted branch prints its SHA, so `git branch <name> <sha>` brings it back
 
 ### Configuration
 
-Replace the default protected branches, globally or per repository:
+Settings are git config keys, global (`--global`) or per repository:
 
 ```sh
-git config --global gitix.keep "main master develop staging"
+git config --global gitix.keep "main master develop staging"   # protected branches
+git config gitix.base "origin/develop"                          # bases to compare with
+git config gitix.fetch false                                    # no git fetch before clean
 ```
+
+`gitix.keep` **replaces** the default list (`main master develop`): list them too if you still
+want them protected.
 
 ### Shell completion
 

@@ -88,6 +88,22 @@ func (r *Repo) SquashMerged(branch, base string) (bool, error) {
 	return strings.HasPrefix(out, "-"), nil
 }
 
+// RebaseMerged reports whether every commit of branch already has an equivalent
+// patch in base, which is what a "rebase and merge" leaves behind: the same commits
+// replayed with new SHAs, so neither IsAncestor nor SquashMerged sees them.
+func (r *Repo) RebaseMerged(branch, base string) (bool, error) {
+	out, err := r.run.Run("cherry", base, branch)
+	if err != nil || out == "" {
+		return false, err
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if !strings.HasPrefix(line, "-") {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
 // CommitsNotIn counts commits on branch that are not reachable from base.
 func (r *Repo) CommitsNotIn(branch, base string) (int, error) {
 	out, err := r.run.Run("rev-list", "--count", base+".."+branch)

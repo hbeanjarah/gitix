@@ -85,7 +85,12 @@ func Run(opts Options, args []string) int {
 }
 
 func newRoot(opts Options) *cobra.Command {
-	a := &app{opts: opts, repo: git.New(git.ExecRunner{Dir: opts.Dir}), in: bufio.NewReader(opts.In)}
+	runner := git.ExecRunner{Dir: opts.Dir}
+	if !opts.Interactive {
+		// Scripts and CI: git must fail rather than wait for a password nobody types.
+		runner.Env = []string{"GIT_TERMINAL_PROMPT=0"}
+	}
+	a := &app{opts: opts, repo: git.New(runner), in: bufio.NewReader(opts.In)}
 	root := &cobra.Command{
 		Use:           "gitix",
 		Short:         "Find and clean git branches. Identify and eXecute.",

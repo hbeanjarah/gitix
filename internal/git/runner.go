@@ -3,6 +3,7 @@ package git
 import (
 	"bytes"
 	"errors"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -27,11 +28,15 @@ func (e *Error) Error() string {
 
 type ExecRunner struct {
 	Dir string
+	Env []string // added to the environment, e.g. "GIT_TERMINAL_PROMPT=0"
 }
 
 func (r ExecRunner) Run(args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = r.Dir
+	if len(r.Env) > 0 {
+		cmd.Env = append(os.Environ(), r.Env...)
+	}
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()

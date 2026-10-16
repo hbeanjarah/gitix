@@ -106,3 +106,28 @@ func TestSquashMergedUnrelatedHistory(t *testing.T) {
 		t.Errorf("want false, nil; got %v, %v", sq, err)
 	}
 }
+
+func TestRebaseMerged(t *testing.T) {
+	r := testrepo.New(t)
+	r.Branch("feat/rebased")
+	r.Commit("second.txt", "two commits on this branch")
+	r.RebaseMerge("feat/rebased")
+	r.Branch("feat/half")
+	r.Commit("half.txt", "only the first commit reaches main")
+	r.Git("switch", "main")
+	r.Git("cherry-pick", "feat/half~1")
+	r.Git("push", "origin", "main")
+	r.Branch("feat/wip")
+	r.Git("fetch")
+	repo := git.New(git.ExecRunner{Dir: r.Dir})
+
+	for branch, want := range map[string]bool{"feat/rebased": true, "feat/half": false, "feat/wip": false} {
+		got, err := repo.RebaseMerged(branch, "origin/main")
+		if err != nil || got != want {
+			t.Errorf("%s RebaseMerged: want %v, got %v, %v", branch, want, got, err)
+		}
+	}
+	if sq, _ := repo.SquashMerged("feat/rebased", "origin/main"); sq {
+		t.Errorf("feat/rebased: a rebase merge is not a squash merge")
+	}
+}

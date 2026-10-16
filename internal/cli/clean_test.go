@@ -81,7 +81,7 @@ func TestCleanListShowsDeletableBranchesMergedChecked(t *testing.T) {
 		}
 	}
 	checkOutput(t, p.labels(),
-		"merged → main", "merged (squash) → main", "1 commit, remote deleted", "1 commit, never pushed", "ago")
+		"merged → main", "merged (squash) → main", "1 commit not in main, remote deleted", "1 commit not in main, never pushed", "ago")
 	if strings.Contains(p.labels(), "\x1b[") {
 		t.Errorf("labels must not contain colors:\n%q", p.labels())
 	}
@@ -95,7 +95,7 @@ func TestCleanConfirmsMergedWithYesByDefault(t *testing.T) {
 	}
 	checkBranches(t, r, res, mergedBranches, append(keptBranches, notMergedBranches...))
 	checkOutput(t, res.out, "Base: origin/main", "Delete 3 branches? [Y/n]", "Deleted feat/merged (was ", "Restore with: git branch <name> <sha>")
-	checkOutput(t, res.err, "Analyzing 8 branches…")
+	checkOutput(t, res.err, "Analyzing branches  5/5")
 }
 
 func TestCleanMergedRefused(t *testing.T) {
@@ -169,7 +169,7 @@ func TestCleanMergedIntoDevelop(t *testing.T) {
 	checkOutput(t, res.out,
 		"Bases: origin/main, origin/develop",
 		"merged → develop",
-		"1 commit not merged",
+		"1 commit not in develop",
 	)
 }
 
@@ -186,13 +186,13 @@ func TestCleanDryRunText(t *testing.T) {
 		"Base: origin/main",
 		"",
 		"Merged (3)",
-		"  feat/maintenance   merged → main              ",
-		"  feat/squashed      merged (squash) → main     ",
-		"  feat/merged        merged → main              ",
+		"  feat/maintenance   merged → main                          ",
+		"  feat/squashed      merged (squash) → main                 ",
+		"  feat/merged        merged → main                          ",
 		"",
 		"Not merged (2)",
-		"  feat/abandoned     1 commit, remote deleted   ",
-		"  feat/wip           1 commit, never pushed     ",
+		"  feat/abandoned     1 commit not in main, remote deleted   ",
+		"  feat/wip           1 commit not in main, never pushed     ",
 		"",
 		"Dry run: nothing deleted.",
 	}

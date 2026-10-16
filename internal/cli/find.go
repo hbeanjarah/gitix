@@ -53,6 +53,18 @@ func (a *app) runFind(term string, remote, switchTo bool) error {
 		if term == "" {
 			return fail("no branches")
 		}
+		if !remote {
+			if all, err := a.repo.Branches(true); err == nil {
+				if n := len(find.Filter(all, term)); n > 0 {
+					verb := "do"
+					if n == 1 {
+						verb = "does"
+					}
+					return fail("no local branch matches %q; %s %s, run: gitix find %s -r",
+						term, count(n, "remote branch"), verb, ui.Safe(term))
+				}
+			}
+		}
 		return fail("no branch matches %q", term)
 	}
 	if !switchTo {
